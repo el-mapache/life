@@ -3,6 +3,7 @@
   <head>
     <style>
       canvas {
+        background: rgba(0,255,155,0.25);
       }
     </style>
   </head>
@@ -15,6 +16,11 @@
     </div>
     <script src="sample2d.js"></script>
     <script>
+      /*
+       * complimentary color 255 - (initial r, g,b);
+       * triad - inital r,g,b swap -> b,g,r; g,b,r; b,r,g, etc.
+       *
+      */
       var SQUARE_SIZE = 8;
       var TICK = 350;
       var counter = 0;
@@ -122,13 +128,13 @@
       }
 
       function kill(x,y) {
-        ctx.fillStyle = "white"
+        ctx.fillStyle = "rgba(255,155,0,0.12)";
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 0);
       }
 
       function birth(x, y) {
-        ctx.fillStyle = "black"
+        ctx.fillStyle = "rgba(0,100,255,0.40)";
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 1);
       }
