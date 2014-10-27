@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      canvas {
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="board" height="401" width="801"></canvas>
+    <button type="button" id="play">Play</button>
+    <div>
+      <h3>Iterations</h3>
+      <div id="count"></div>
+    </div>
+    <script src="sample2d.js"></script>
+    <script>
+      var SQUARE_SIZE = 8;
+      var TICK = 350;
+      var counter = 0;
+      var board = document.getElementById('board');
+      var ctx = board.getContext('2d');
+      var bounds = board.getBoundingClientRect();
+      var grid = new Grid();
+
+      var shouldLive = [];
+      var shouldDie = [];
+
+      var width = board.width;
+      var height = board.height;
+
+      var unscaledWidth = (width - 1) / SQUARE_SIZE;
+      var unscaledHeight = (height - 1) / SQUARE_SIZE;
+
+
+      // Defines a grid class with internal data structure to represent state at
+      // a given position.
+      function Grid() {
+        var map = {};
+
+        this.at = function(x,y) {
+          return map[this._formatCoords(x,y)];
+        };
+
+        this.set = function(x,y,obj) {
+          map[this._formatCoords(x,y)] = obj;
+          return obj;
+        };
+
+        this.each = function(callback) {
+          var position;
+          for (position in map) {
+            callback(map[position], position);
+          }
+        };
+
+        this.filter = function(predicate) {
+          var output = [];
+
+          this.each(function(item, key) {
+            if (predicate(item)) {
+              output.push(key);
+            }
+          });
+
+          return output;
+        };
+
+        this._formatCoords = function(x,y) {
+          return x + 'x' + y;
+        };
+      }
+
+      function inBounds(x,y) {
+        return x > 0 && x <= unscaledWidth && y > 0 && y <= unscaledHeight;
+      }
+
+      function getNeighbors(x,y) {
+         return [ [x+1, y],
+          [x-1, y],
+          [x+1, y+1],
+          [x-1, y-1],
+          [x+1,y-1],
+          [x-1,y+1],
+          [x, y+1],
+          [x, y-1],
+        ];
+      }
+
+      function neighbors(x, y) {
+        return getNeighbors(x, y).filter(function(neighbor) {
+          return inBounds(neighbor[0], neighbor[1]) ? true : false;
+        });
+      }
+      
+      function doLife(x, y) {
+        var thisLife = grid.at(x,y);
+
+        var coordsList = [x, y];
+        if (!thisLife) {
+          shouldLive.push(coordsList);
+        } else {
+          shouldDie.push(coordsList);
+        }
+      }
+
+      function kill(x,y) {
+        ctx.fillStyle = "white"
+        ctx.fillRect((x * SQUARE_SIZE)- SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+        grid.set(x, y, 0);
+      }
+
+      function birth(x, y) {
+        ctx.fillStyle = "black"
+        ctx.fillRect((x * SQUARE_SIZE)- SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+        grid.set(x, y, 1);
+      }
+
+      board.onclick = function(event) {
+        var x = event.clientX - bounds.left;
+        var y = event.clientY - bounds.top;
+
+
+        addSquare(x, y);
+      };
+
+      function addSquare(x,y) {
+        var col = ((x/SQUARE_SIZE) | 0) + 1;
+        var row = ((y/SQUARE_SIZE) | 0) + 1;
+
+        if (grid.at(col,row)) {
+          kill(col,row);
+        } else {
+          birth(col,row);
+        }
+      }
+
+      function play() {
+        grid.each(function(state, coordString) {
+          var coords = coordString.split('x'); 
+          var x = +coords[0], y = +coords[1];
+
+          neighborCount = neighbors(x,y).filter(function(coordList) {
+            var xx = +coordList[0], yy = +coordList[1];
+
+            return grid.at(xx, yy) ? true : false;
+          }).length;
+          
+          if (neighborCount > 1 && neighborCount <= 3) {
+            if (neighborCount === 3) {
+              shouldLive.push([x,y]);
+            }
+          } else if (neighborCount >= 4 || neighborCount <= 1) {
+            shouldDie.push([x,y]);
+          }
+        });
+
+        var toKill;
+        while (shouldDie.length) {
+          toKill = shouldDie.pop();
+
+          kill(toKill[0], toKill[1]);
+        }
+
+        var toBirth;
+        while (shouldLive.length) {
+          toBirth = shouldLive.pop();
+
+          birth(toBirth[0], toBirth[1]);
+        }
+
+        shouldDie.length = 0;
+        shouldLive.length = 0;
+        counter += 1;
+
+        document.getElementById('count').innerHTML = counter;
+        setTimeout(play, TICK);
+      }
+
+
+      function showGrid() {
+        ctx.beginPath();
+
+        for (var x = 0.5; x < width; x += SQUARE_SIZE) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+
+          ctx.moveTo(0, x);
+          ctx.lineTo(height, x);
+        }
+
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+//      showGrid();
+
+      for (var x = 1; x < width/SQUARE_SIZE;x++) {
+        for (var y = 1; y < width/SQUARE_SIZE;y++) {
+          grid.set(x,y,0);
+        }
+      }
+
+      function samples2d(numberOfSamples) {
+        // Samples will be an array of arrays, representing the
+        // x and y co-ordinantes returned by the hilbert function
+        var samples = [];
+        var delta = Math.random() / numberOfSamples;
+        for ( var ii = 0; ii < 1.0; ii += delta ) {
+          samples.push( window.hilbertify(ii + Math.random() * delta, 2) );
+        }
+
+        return samples;
+      };
+
+        var NUMBER_OF_SAMPLES = 850;
+        var samples = samples2d(NUMBER_OF_SAMPLES );
+
+        samples.forEach(function(sample) {
+          var x = (sample[0] * width) | 0;
+          var y = (sample[1] * height) | 0;
+          
+          if (x > width) {
+            x =width;
+          } else if (x < 0) {
+            x = 0;
+          }
+
+          if (y > height) {
+            y = height;
+          } else if (y < 0) {
+            y = 0;
+          }
+          addSquare(x,y);
+        });
+
+      document.getElementById('play').onclick = function() {
+        play();
+      };
+    </script>
+  </body>
+</html>
