@@ -1,4 +1,4 @@
 life
 ====
 
-Simple game of life implmentation
+Simple game of life implementation
