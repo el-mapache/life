@@ -32,6 +32,22 @@
       var unscaledWidth = (width - 1) / SQUARE_SIZE;
       var unscaledHeight = (height - 1) / SQUARE_SIZE;
 
+      var SEED_A = [
+        [1,1,1,0,1],
+        [1,0,0,0,0],
+        [0,0,0,1,1],
+        [0,1,1,0,1],
+        [1,0,1,0,1]
+      ];
+
+      var SEED_B = [
+        [0,0,0,0,0,0,1,0],
+        [0,0,0,0,1,0,1,1],
+        [0,0,0,0,1,0,1,0],
+        [0,0,0,0,1,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,1,1,0,0,0,0,0]
+      ];
 
       // Defines a grid class with internal data structure to represent state at
       // a given position.
@@ -76,7 +92,8 @@
       }
 
       function getNeighbors(x,y) {
-         return [ [x+1, y],
+        return [
+          [x+1, y],
           [x-1, y],
           [x+1, y+1],
           [x-1, y-1],
@@ -106,13 +123,13 @@
 
       function kill(x,y) {
         ctx.fillStyle = "white"
-        ctx.fillRect((x * SQUARE_SIZE)- SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+        ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 0);
       }
 
       function birth(x, y) {
         ctx.fillStyle = "black"
-        ctx.fillRect((x * SQUARE_SIZE)- SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+        ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 1);
       }
 
@@ -178,22 +195,24 @@
       }
 
 
-      function showGrid() {
-        ctx.beginPath();
+     // function showGrid() {
+     //   ctx.beginPath();
 
-        for (var x = 0.5; x < width; x += SQUARE_SIZE) {
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, height);
+     //   for (var x = 0; x < width; x += SQUARE_SIZE) {
+     //     ctx.moveTo(x+0.5, 0);
+     //     ctx.lineTo(x + 0.5, height);
+     //   }
 
-          ctx.moveTo(0, x);
-          ctx.lineTo(height, x);
-        }
+     //   for (var x = 0; x < height; x += SQUARE_SIZE) {
+     //     ctx.moveTo(0, x + 0.5);
+     //     ctx.lineTo(width, x + 0.5);
+     //   }
 
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+     //   ctx.lineWidth = 1;
+     //   ctx.stroke();
+     // }
 
-//      showGrid();
+     // showGrid();
 
       for (var x = 1; x < width/SQUARE_SIZE;x++) {
         for (var y = 1; y < width/SQUARE_SIZE;y++) {
