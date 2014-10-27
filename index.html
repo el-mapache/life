@@ -22,7 +22,7 @@
        *
       */
       var SQUARE_SIZE = 8;
-      var TICK = 350;
+      var TICK = 150;
       var counter = 0;
       var board = document.getElementById('board');
       var ctx = board.getContext('2d');
@@ -128,13 +128,13 @@
       }
 
       function kill(x,y) {
-        ctx.fillStyle = "rgba(255,155,0,0.12)";
+        ctx.fillStyle = "rgba(255,105,35,0.12)";
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 0);
       }
 
       function birth(x, y) {
-        ctx.fillStyle = "rgba(0,100,255,0.40)";
+        ctx.fillStyle = "rgba(0,140,220,0.35)";
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 1);
       }
@@ -238,7 +238,7 @@
         return samples;
       };
 
-        var NUMBER_OF_SAMPLES = 850;
+        var NUMBER_OF_SAMPLES = 1550;
         var samples = samples2d(NUMBER_OF_SAMPLES );
 
         samples.forEach(function(sample) {
