@@ -262,11 +262,13 @@
 
         if (newCellCount === currentCellCount) {
           shouldEnd++;
+        } else {
+          shouldEnd = 0;
+        }
 
-         // if (shouldEnd >= 20) {
-         //   alert('Game Over');
-         //   return;
-         // }
+        if (shouldEnd >= 8) {
+          alert('Game Over');
+          return;
         }
 
         livingCellsEl.innerHTML = newCellCount;
