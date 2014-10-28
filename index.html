@@ -5,15 +5,52 @@
       canvas {
         background: rgba(0,255,155,0.25);
       }
+
+      .container {
+        font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif; 
+        display: table;
+        margin-bottom: 20px;
+      }
+
+      .container h3 {
+        font-weight: 300;
+      }
+
+      .container:before, .container:after {
+        clear: both;
+      }
+
+      button {
+        padding: 8px;
+        outline: 0;
+        background: #eeeeef;
+        border: none;
+        font-size: 23px;
+        font-weight: 300;
+        font-family: Helvetica;
+        cursor: pointer;
+        width: 80px;
+        color: #333;
+      }
     </style>
   </head>
   <body>
-    <canvas id="board" height="401" width="801"></canvas>
-    <button type="button" id="play">Play</button>
-    <div>
-      <h3>Iterations</h3>
-      <div id="count"></div>
+    <div class="container">
+      <div style="float: left">
+        <h3>Generations</h3>
+        <span id="count">-</span>
+      </div>
+    
+      <div style="float:left; margin-left: 20px;">
+        <h3>Living Cells</h3>
+        <span id="live-count">-</span>
+      </div>
     </div>
+    <div>
+      <canvas id="board" height="401" width="801"></canvas>
+    </div>
+    <button type="button" id="play">Play</button>
+    
     <script src="sample2d.js"></script>
     <script>
       /*
@@ -29,6 +66,11 @@
       var bounds = board.getBoundingClientRect();
       var grid = new Grid();
 
+      var livingCellsEl = document.getElementById('live-count');
+      var countEl = document.getElementById('count');
+
+      var shouldEnd = 0;
+
       var shouldLive = [];
       var shouldDie = [];
 
@@ -38,7 +80,7 @@
       var unscaledWidth = (width - 1) / SQUARE_SIZE;
       var unscaledHeight = (height - 1) / SQUARE_SIZE;
 
-      var SEED_A = [
+      var SEED = [
         [1,1,1,0,1],
         [1,0,0,0,0],
         [0,0,0,1,1],
@@ -46,7 +88,13 @@
         [1,0,1,0,1]
       ];
 
-      var SEED_B = [
+      var GLIDER = [
+        [0,1,0],
+        [0,0,1],
+        [1,1,1]
+      ];
+
+      var BRICK = [
         [0,0,0,0,0,0,1,0],
         [0,0,0,0,1,0,1,1],
         [0,0,0,0,1,0,1,0],
@@ -127,14 +175,23 @@
         }
       }
 
+      function reColor(x, y, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+      }
+
       function kill(x,y) {
-        ctx.fillStyle = "rgba(255,105,35,0.12)";
+        if (grid.at(x,y)) {
+          ctx.fillStyle = "rgba(235,245,255,0.8)";
+        } else {
+          ctx.fillStyle = "rgba(255,155,0,0.12)";
+        }
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 0);
       }
 
       function birth(x, y) {
-        ctx.fillStyle = "rgba(0,140,220,0.35)";
+        ctx.fillStyle = "rgba(0,100,255,0.50)";
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 1);
       }
@@ -159,6 +216,8 @@
       }
 
       function play() {
+        var currentCellCount = grid.filter(function(item) { return item;}).length;
+
         grid.each(function(state, coordString) {
           var coords = coordString.split('x'); 
           var x = +coords[0], y = +coords[1];
@@ -170,6 +229,8 @@
           }).length;
           
           if (neighborCount > 1 && neighborCount <= 3) {
+            reColor(x,y, "rgba(255, 0, 100, 0.20)");
+
             if (neighborCount === 3) {
               shouldLive.push([x,y]);
             }
@@ -196,7 +257,20 @@
         shouldLive.length = 0;
         counter += 1;
 
-        document.getElementById('count').innerHTML = counter;
+
+        var newCellCount = grid.filter(function(item) { return item; }).length;
+
+        if (newCellCount === currentCellCount) {
+          shouldEnd++;
+
+         // if (shouldEnd >= 20) {
+         //   alert('Game Over');
+         //   return;
+         // }
+        }
+
+        livingCellsEl.innerHTML = newCellCount;
+        countEl.innerHTML = counter;
         setTimeout(play, TICK);
       }
 
@@ -238,7 +312,7 @@
         return samples;
       };
 
-        var NUMBER_OF_SAMPLES = 1550;
+        var NUMBER_OF_SAMPLES = 850;
         var samples = samples2d(NUMBER_OF_SAMPLES );
 
         samples.forEach(function(sample) {
