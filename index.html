@@ -50,6 +50,7 @@
       <canvas id="board" height="401" width="801"></canvas>
     </div>
     <button type="button" id="play">Play</button>
+    <button type="button" id="reset">Reset</button>
     
     <script src="sample2d.js"></script>
     <script>
@@ -58,6 +59,29 @@
        * triad - inital r,g,b swap -> b,g,r; g,b,r; b,r,g, etc.
        *
       */
+
+      function Cell() {
+        this.liveTime = 0;
+        this.currentState = 0;
+        this.previousState = 0;
+
+        this.setColor = function() {};
+      } 
+
+      var NUMBER_OF_SAMPLES = 850;
+
+      var GAME_MODES = {
+        CLASSIC: 'classic',
+        ARCADE: 'arcade'
+      };
+
+      var game = {
+        PLAYING: false,
+        MODE: 'classic'
+      };
+
+      var gameInterval = undefined;
+
       var SQUARE_SIZE = 8;
       var TICK = 150;
       var counter = 0;
@@ -181,17 +205,27 @@
       }
 
       function kill(x,y) {
-        if (grid.at(x,y)) {
-          ctx.fillStyle = "rgba(235,245,255,0.8)";
+        if (game.MODE === GAME_MODES.CLASSIC) {
+          ctx.fillStyle = 'white';
         } else {
-          ctx.fillStyle = "rgba(255,155,0,0.12)";
+          if (grid.at(x,y)) {
+            ctx.fillStyle = "rgba(235,245,255,0.8)";
+          } else {
+            ctx.fillStyle = "rgba(255,155,0,0.12)";
+          }
         }
+
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 0);
       }
 
       function birth(x, y) {
-        ctx.fillStyle = "rgba(0,100,255,0.50)";
+        if (game.MODE === GAME_MODES.CLASSIC) {
+          ctx.fillStyle = 'black';
+        } else {
+          ctx.fillStyle = "rgba(0,100,255,0.50)";
+        }
+
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 1);
       }
@@ -216,6 +250,7 @@
       }
 
       function play() {
+        game.PLAYING = !game.PLAYING;
         var currentCellCount = grid.filter(function(item) { return item;}).length;
 
         grid.each(function(state, coordString) {
@@ -229,7 +264,9 @@
           }).length;
           
           if (neighborCount > 1 && neighborCount <= 3) {
-            reColor(x,y, "rgba(255, 0, 100, 0.20)");
+            if (game.MODE === GAME_MODES.ARCADE) {
+              reColor(x,y, "rgba(255, 0, 100, 0.20)");
+            }
 
             if (neighborCount === 3) {
               shouldLive.push([x,y]);
@@ -273,7 +310,6 @@
 
         livingCellsEl.innerHTML = newCellCount;
         countEl.innerHTML = counter;
-        setTimeout(play, TICK);
       }
 
 
@@ -302,20 +338,17 @@
         }
       }
 
-      function samples2d(numberOfSamples) {
-        // Samples will be an array of arrays, representing the
-        // x and y co-ordinantes returned by the hilbert function
-        var samples = [];
-        var delta = Math.random() / numberOfSamples;
-        for ( var ii = 0; ii < 1.0; ii += delta ) {
-          samples.push( window.hilbertify(ii + Math.random() * delta, 2) );
+      function resetBoard() {
+        if (game.PLAYING) {
+          clearInterval(gameInterval);
+          game.PLAYING = !game.PLAYING;
+          gameInterval = undefined;
+          shouldLive.length = 0;
+          shouldDie.length = 0;
+          ctx.clearRect(0,0,width,height);
         }
 
-        return samples;
-      };
-
-        var NUMBER_OF_SAMPLES = 850;
-        var samples = samples2d(NUMBER_OF_SAMPLES );
+        var samples = hilbertSampler(NUMBER_OF_SAMPLES );
 
         samples.forEach(function(sample) {
           var x = (sample[0] * width) | 0;
@@ -334,10 +367,15 @@
           }
           addSquare(x,y);
         });
+      }
+
+      resetBoard(NUMBER_OF_SAMPLES);
 
       document.getElementById('play').onclick = function() {
         play();
-      };
+        gameInterval = setInterval(play, TICK);
+      }
+      document.getElementById('reset').onclick = resetBoard;
     </script>
   </body>
 </html>

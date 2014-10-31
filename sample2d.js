@@ -31,7 +31,7 @@
     return (mask & (x << rotation)) | (x >> (width - rotation));
   };
 
-  window.hilbertify = function( _scalar, rank ) {
+  var hilbertify = function( _scalar, rank ) {
     var MAX_SHIFT = 30,
         MAX_INT   = ((1 << MAX_SHIFT) -1 << 1) + 1,
         scalar    = _scalar * MAX_INT >> 1,
@@ -66,8 +66,18 @@
       outputs[i] = disgray(outputs[i]) / MAX_INT;
 
     return outputs;
-  }
+  };
+
+  window.hilbertSampler = function(numberOfSamples) {
+    // Samples will be an array of arrays, representing the
+    // x and y co-ordinantes returned by the hilbert function
+    var samples = [];
+    var delta = Math.random() / numberOfSamples;
+    for ( var ii = 0; ii < 1.0; ii += delta ) {
+      samples.push( hilbertify(ii + Math.random() * delta, 2) );
+    }
+
+    return samples;
+  };
 })();
 
-(function(){
-});
