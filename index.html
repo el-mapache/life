@@ -50,9 +50,11 @@
       <canvas id="board" height="401" width="801"></canvas>
     </div>
     <button type="button" id="play">Play</button>
+    <button type="button" id="pause">Pause</button>
     <button type="button" id="reset">Reset</button>
-    
-    <script src="sample2d.js"></script>
+
+    <script src="js/sample2d.js"></script>
+    <script src="js/underscore.min.js"></script>
     <script>
       /*
        * complimentary color 255 - (initial r, g,b);
@@ -60,13 +62,22 @@
        *
       */
 
-      function Cell() {
-        this.liveTime = 0;
-        this.currentState = 0;
-        this.previousState = 0;
+      var LIFE_STATES = {
+        VIRGIN: 'virgin',
+        ALIVE: 'alive',
+        DEAD: 'dead'
+      };
 
-        this.setColor = function() {};
-      } 
+      function Cell(xPos, yPos) {
+        this.liveTime = 0;
+        this.currentState = LIFE_STATES.VIRGIN;
+        this.previousState = LIFE_STATES.VIRGIN;
+        this.x = xPos;
+        this.y = yPos;
+        this.history = [];
+        //this.size;
+      }
+
 
       var NUMBER_OF_SAMPLES = 850;
 
@@ -83,7 +94,7 @@
       var gameInterval = undefined;
 
       var SQUARE_SIZE = 8;
-      var TICK = 150;
+      var TICK = 300;
       var counter = 0;
       var board = document.getElementById('board');
       var ctx = board.getContext('2d');
@@ -100,9 +111,76 @@
 
       var width = board.width;
       var height = board.height;
-
       var unscaledWidth = (width - 1) / SQUARE_SIZE;
       var unscaledHeight = (height - 1) / SQUARE_SIZE;
+
+
+      function Board(width, height) {
+        var cells = [];
+        var board = this;
+
+        var row = column = -1;
+
+        while (++row < height) {
+          cells[row] = [];
+
+          while (++column < width) {
+            cells[row][column] = new Cell(column, row);
+          }
+          column = -1;
+        }
+
+        board.at = function(x, y) {
+          if (cells[x]) {
+            return cells[x][y];
+          }
+        };
+
+        board.living = function() {
+          return board.flatten(cells.map(function(cellGroup, i) {
+            return board.filter(cellGroup, function(cell, i) {
+              return cell.currentState === LIFE_STATES.VIRGIN;
+            });
+          }));
+        };
+
+        board.flatten = function(list/*...*/) {
+          var output = [];
+
+          board.each([].slice.call(arguments), function(list, listPos) {
+            board.each(list, function(item, itemPos) {
+              output[listPos * itemPos] = item;
+            });
+          });
+          return output;
+        };
+
+        board.each = function(list, callback) {
+          var length = list.length - 1;
+
+          for (var i = 0; i < length; i++) {
+            callback(list[i], i);
+          }
+        };
+
+        board.filter = function(list, predicate) {
+          var output = [];
+
+          board.each(list, function(item, index) {
+            if (predicate(item)) {
+              output.push(item);
+            }
+          });
+
+          return output;
+        };
+      }
+
+      Board.constructor = Board;
+
+      window.b = new Board(unscaledWidth, unscaledHeight);
+
+
 
       var SEED = [
         [1,1,1,0,1],
@@ -305,6 +383,7 @@
 
         if (shouldEnd >= 8) {
           alert('Game Over');
+          clearInterval(gameInterval);
           return;
         }
 
