@@ -2,8 +2,8 @@
  // HILBERTIFY.JS
 //
 (function(){
-  var gray = function( x ) { 
-    return( x ^ (x >> 1) ); 
+  var gray = function( x ) {
+    return( x ^ (x >> 1) );
   };
 
   var disgray = function( x ) {
@@ -68,16 +68,23 @@
     return outputs;
   };
 
-  window.hilbertSampler = function(numberOfSamples) {
-    // Samples will be an array of arrays, representing the
-    // x and y co-ordinantes returned by the hilbert function
-    var samples = [];
-    var delta = Math.random() / numberOfSamples;
-    for ( var ii = 0; ii < 1.0; ii += delta ) {
-      samples.push( hilbertify(ii + Math.random() * delta, 2) );
+
+
+  window.SamplerService = (function() {
+    function sample(numberOfSamples) {
+      // Samples will be an array of arrays, representing the
+      // x and y co-ordinantes returned by the hilbert function
+      var samples = [];
+      var delta = Math.random() / numberOfSamples;
+      for ( var ii = 0; ii < 1.0; ii += delta ) {
+        samples.push( hilbertify(ii + Math.random() * delta, 2) );
+      }
+
+      return samples;
     }
 
-    return samples;
-  };
+    return {
+      sample: sample
+    };
+  })();
 })();
-
