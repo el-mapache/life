@@ -152,10 +152,9 @@
       Cell.prototype.draw = function(ctx) {
         var size = this.size;
         var location = this.location;
-console.log(this.location)
 
         ctx.fillStyle = this.currentState === LIFE_STATES.ALIVE ? "black" : "white";
-        ctx.fillRect((location.x * size + 1) - size, (location.y * size + 1) - size, size, size);
+        ctx.fillRect((location.x * size) - size, (location.y * size) - size, size, size);
       };
 
       Cell.constructor = Cell;
