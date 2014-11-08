@@ -1,0 +1,39 @@
+canvas {
+  /*background: rgba(0,255,155,0.25);*/
+}
+
+.container {
+  font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+  display: table;
+  margin-bottom: 20px;
+}
+
+.container h3 {
+  font-weight: 300;
+}
+
+.container:before, .container:after {
+  clear: both;
+}
+
+button {
+  padding: 8px;
+  outline: 0;
+  background: #eeeeef;
+  border: none;
+  font-size: 23px;
+  font-weight: 300;
+  font-family: Helvetica;
+  cursor: pointer;
+  width: 80px;
+  color: #333;
+}
+
+button.active {
+  background: #eeeee6;
+}
+
+#overlay {
+  background: transparent;
+  position: absolute;
+}

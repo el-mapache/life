@@ -1,65 +1,39 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <style>
-      canvas {
-        /*background: rgba(0,255,155,0.25);*/
-      }
-
-      .container {
-        font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
-        display: table;
-        margin-bottom: 20px;
-      }
-
-      .container h3 {
-        font-weight: 300;
-      }
-
-      .container:before, .container:after {
-        clear: both;
-      }
-
-      button {
-        padding: 8px;
-        outline: 0;
-        background: #eeeeef;
-        border: none;
-        font-size: 23px;
-        font-weight: 300;
-        font-family: Helvetica;
-        cursor: pointer;
-        width: 80px;
-        color: #333;
-      }
-
-      #overlay {
-        background: transparent;
-        position: absolute;
-      }
-    </style>
+    <link rel="stylesheet" href="css/style.css"/>
   </head>
   <body>
     <div id="app-container">
+
       <div class="container">
+
         <div style="float: left">
           <h3>Generations</h3>
-          <span id="count">-</span>
+          <span id="generations"></span>
         </div>
 
         <div style="float:left; margin-left: 20px;">
           <h3>Living Cells</h3>
-          <span id="live-count">-</span>
+          <span id="living-cells"></span>
         </div>
+
       </div>
+
+
       <div>
         <canvas id='overlay' height="401" width="801"></canvas>
         <canvas id="board" height="400" width="800"></canvas>
       </div>
-      <button type="button" id="play">Play</button>
-      <button type="button" id="pause">Pause</button>
-      <button type="button" id="reset">Reset</button>
-      <button type="button" id="grid-toggle">Grid</button>
+
+      <div>
+        <button type="button" id="play">Play</button>
+        <button type="button" id="pause">Pause</button>
+        <button type="button" id="reset">Reset</button>
+        <button type="button" id="grid-toggle">Grid</button>
+        <button type="button" id="clear">Clear</button>
+      </div>
+
     </div>
 
     <script src="js/sample2d.js"></script>
@@ -81,43 +55,46 @@
         DEAD: 'dead'
       };
 
-      var NUMBER_OF_SAMPLES =   50;
-
       var GAME_MODES = {
         CLASSIC: 'classic',
         ARCADE: 'arcade'
       };
 
-      var game = {
-        PLAYING: false,
-        MODE: 'classic'
-      };
 
       var gameInterval = undefined;
 
       var SQUARE_SIZE = 8;
-      var TICK = 300;
-      var counter = 0;
-      var board = document.getElementById('board');
-      var ctx = board.getContext('2d');
       var bounds = document.getElementById('overlay').getBoundingClientRect();
-      var grid = new Grid();
-
-      var livingCellsEl = document.getElementById('live-count');
-      var countEl = document.getElementById('count');
 
       var shouldEnd = 0;
 
-      var shouldLive = [];
-      var shouldDie = [];
 
-      var width = board.width;
-      var height = board.height;
-      var unscaledWidth = (width - 1) / SQUARE_SIZE;
-      var unscaledHeight = (height - 1) / SQUARE_SIZE;
+
+      var RulesService = {
+
+      };
+
+      var gameService = new (Backbone.Model.extend({
+        defaults: {
+          tickSpeed: 300,
+          mode: 'classic',
+          playing: false,
+          livingCells: 0,
+          lastLivingCells: 0,
+          generations: 0
+        },
+
+        updateLivingCells: function(count) {
+          this.set({
+            lastLivingCells: this.get('livingCells'),
+            livingCells: count
+          });
+        }
+      }))();
 
 
       /** DATA MODELSish **/
+
 
       function Location(x,y) {
         this.x = x;
@@ -130,17 +107,14 @@
         this.currentState = LIFE_STATES.VIRGIN;
         this.previousState = LIFE_STATES.VIRGIN;
         this.size = size;
+        this.willLive = false;
+        this.willDie = false;
 
         this.location = new Location(initialXPos, initialYPos);
         this.history = [];
       }
 
       Cell.prototype.setState = function(state) {
-        // Don't set a state if it isnt new.
-        if (this.currentState === state) {
-          return this;
-        }
-
         this.previousState = this.currentState;
         this.history.push(this.previousState);
         this.currentState = state;
@@ -155,6 +129,22 @@
 
         ctx.fillStyle = this.currentState === LIFE_STATES.ALIVE ? "black" : "white";
         ctx.fillRect((location.x * size) - size, (location.y * size) - size, size, size);
+      };
+
+      Cell.prototype.getState = function() {
+        return this.currentState;
+      };
+
+      Cell.prototype.isAlive = function() {
+        return this.currentState === LIFE_STATES.ALIVE;
+      };
+
+      Cell.prototype.isDead = function() {
+        return this.currentState === LIFE_STATES.DEAD;
+      };
+
+      Cell.prototype.isPristine = function() {
+        return this.currentState === LIFE_STATES.VIRGIN;
       };
 
       Cell.constructor = Cell;
@@ -184,10 +174,44 @@
         return this.cells[x + this.width * y];
       };
 
-      Board.prototype.allByState = function(state) {
+      Board.prototype.filterBy = function(list, state) {
+        list = list || this.cells;
+
         return _.filter(this.cells, function(cell) {
-          return cell.currentState === state;
+          return cell.getState() === state;
         });
+      };
+
+      Board.prototype.each = function(callback) {
+        _.each(this.cells, callback);
+      };
+
+      Board.prototype.neighborsOf = function(cell) {
+        var location = cell.location;
+        var neighborCoords = Board.neighbors(location.x, location.y);
+        var board = this;
+
+        return _.compact(neighborCoords.map(function(coords) {
+          var x = coords[0];
+          var y = coords[1];
+
+          if (board.inBounds(x, y)) {
+            return board.at(x, y);
+          }
+        }));
+      };
+
+      Board.neighbors = function(x, y) {
+        return [
+          [x + 1, y],
+          [x - 1, y],
+          [x, y + 1],
+          [x, y - 1],
+          [x + 1, y + 1],
+          [x - 1, y - 1],
+          [x + 1, y - 1],
+          [x - 1, y + 1],
+        ];
       };
 
       Board.constructor = Board;
@@ -200,7 +224,7 @@
 
         initialize: function() {
           this.model = new Backbone.Model({
-            strokeStyle: '#ccc',
+            strokeStyle: '#333',
             lineWidth: 1,
             globalAlpha: 0
           });
@@ -230,6 +254,41 @@
            ctx.strokeStyle = model.strokeStyle;
            ctx.globalAlpha = model.globalAlpha;
            ctx.stroke();
+        },
+
+        toggleGrid: function(payload) {
+          this.model.set('globalAlpha', (payload.active ? 1.0 : 0.0));
+        }
+      });
+
+      var GameStatsView = Backbone.View.extend({
+        el: '#game-stats',
+
+        initialize: function() {
+          this.generationView = new BoundView({
+            el: '#generations',
+            boundProp: 'generations'
+          }).render();
+
+          this.livingCellCountView = new BoundView({
+            el: '#living-cells',
+            boundProp: 'livingCells'
+          }).render();
+        }
+      });
+
+      // A view bound to a single data attribute that changes over time.
+      var BoundView = Backbone.View.extend({
+        template: _.template('<%= data %>'),
+
+        initialize: function(options) {
+          this.boundProp = options.boundProp;
+          this.listenTo(gameService, 'change:' + options.boundProp, this.render);
+        },
+
+        render: function() {
+          this.el.innerHTML = this.template({data: gameService.get(this.boundProp)});
+          return this;
         }
       });
 
@@ -244,10 +303,16 @@
           });
 
           this.callback = options.callback;
+          this.listenTo(this.model, 'change:active', this.updateClass);
+          _.bindAll(this, 'updateClass');
         },
 
-        render: function() {
-
+        updateClass: function(model, value) {
+          if (value) {
+            this.el.className = this.el.className + ' active';
+          } else {
+            this.el.className = this.el.className.replace('active', '');
+          }
         },
 
         onClick: function(event) {
@@ -264,15 +329,70 @@
           this.model = new Board(this.el.width, this.el.height);
           this.seedService = SamplerService;
           this.ctx = this.el.getContext('2d');
+          this.runInterval = null;
 
-          _.bindAll(this, '_processSampledPoint');
-          this._seed();
+          this.listenTo(gameService, 'change:playing', this._onPlayStateChange);
+          _.bindAll(this, '_processSampledPoint', 'run', '_setNextCellState', '_onPlayStateChange');
+          this._seed(850);
         },
 
-        render: function() {},
+        _onPlayStateChange: function(model, value, etc) {
+          if (value) {
+            this.run();
+          } else {
+            if (this.runInterval) {
+              clearInterval(this.runInterval);
+              this.runInterval = null;
+            }
+          }
+        },
 
-        _seed: function() {
-          var points = this.seedService.sample(NUMBER_OF_SAMPLES);
+        _setNextCellState: function(cell) {
+          var neighbors = _.size(_.filter(this.model.neighborsOf(cell), function(cell) {
+            return cell.isAlive();
+          }));
+
+          if (neighbors < 2 || neighbors > 3) {
+            cell.willDie = true;
+          } else if (neighbors === 3) {
+            cell.willLive = true;
+          }
+        },
+
+        run: function() {
+          this.model.each(this._setNextCellState);
+
+          var ctx = this.ctx;
+
+          this.model.each(function(cell) {
+            if (!cell.willLive && !cell.willDie) {
+              return;
+            }
+
+            cell.setState((cell.willLive ? LIFE_STATES.ALIVE : LIFE_STATES.DEAD));
+            cell.draw(ctx);
+            cell.willLive = false;
+            cell.willDie = false;
+          });
+
+          gameService.set({
+            generations: gameService.get('generations') + 1,
+            livingCells: _.size(this.model.filterBy(LIFE_STATES.ALIVE))
+          });
+
+          this.runInterval = setTimeout(this.run, gameService.get('tickSpeed'));
+
+      //   if (shouldEnd >= 8) {
+      //     alert('Game Over');
+      //     clearInterval(gameInterval);
+      //     return;
+      //   }
+        },
+
+        _seed: function(numberOfSamples) {
+          var points = this.seedService.sample(numberOfSamples);
+
+          gameService.set('livingCells', points.length);
 
           _.each(points, this._processSampledPoint);
         },
@@ -283,8 +403,8 @@
 
         _scalePoint: function(point) {
           return [
-            (point[0] * this.model.width+1) | 0,
-            (point[1] * this.model.height+1) | 0
+            (point[0] * this.model.width + 1) | 0,
+            (point[1] * this.model.height + 1) | 0
           ];
         },
 
@@ -309,6 +429,10 @@
         },
 
         initialize: function() {
+          _.bindAll(this, 'togglePlay', 'toggleGrid', 'pause');
+
+          this.statsView = new GameStatsView();
+
           this.playButton = new ButtonView({
             el: '#play',
             callback: this.togglePlay
@@ -321,7 +445,12 @@
 
           this.gridButton = new ButtonView({
             el: '#grid-toggle',
-            callback: this.toggleGrid.bind(this)
+            callback: this.toggleGrid
+          });
+
+          this.pauseButton = new ButtonView({
+            el: '#pause',
+            callback: this.pause
           });
 
           this.overlayView = new OverlayView();
@@ -329,28 +458,32 @@
         },
 
         togglePlay: function(event, payload) {
-          console.log('clicked play');
+          gameService.set('playing', true);
         },
 
         reset: function(event, payload) {
           console.log('clicked reset');
         },
 
+        pause: function(event, payload) {
+          if (gameService.get('playing')) {
+            gameService.set('playing', false);
+          }
+        },
+
         toggleGrid: function(event, payload) {
-          this.overlayView.model.set('globalAlpha', (payload.active ? 1.0 : 0.0));
+          this.overlayView.toggleGrid(payload);
         },
 
         toggleCell: function(event) {
-          var x = ((event.clientX - bounds.left) / SQUARE_SIZE) | 0;
-          var y = ((event.clientY - bounds.top) / SQUARE_SIZE) | 0;
-console.log(event)
-          this.boardView.setCellAtPoint([x,y]);
+          var x = (((event.clientX - bounds.left) / SQUARE_SIZE) | 0) + 1;
+          var y = (((event.clientY - bounds.top) / SQUARE_SIZE) | 0) - 1;
+
+          this.boardView.setCellAtPoint([x, y]);
         }
       });
 
       new AppViewController();
-
-
 
 
       var SEED = [
@@ -375,67 +508,6 @@ console.log(event)
         [0,0,1,0,0,0,0,0],
         [0,1,1,0,0,0,0,0]
       ];
-
-      // Defines a grid class with internal data structure to represent state at
-      // a given position.
-      function Grid() {
-        var map = {};
-
-        this.at = function(x,y) {
-          return map[this._formatCoords(x,y)];
-        };
-
-        this.set = function(x,y,obj) {
-          map[this._formatCoords(x,y)] = obj;
-          return obj;
-        };
-
-        this.each = function(callback) {
-          var position;
-          for (position in map) {
-            callback(map[position], position);
-          }
-        };
-
-        this.filter = function(predicate) {
-          var output = [];
-
-          this.each(function(item, key) {
-            if (predicate(item)) {
-              output.push(key);
-            }
-          });
-
-          return output;
-        };
-
-        this._formatCoords = function(x,y) {
-          return x + 'x' + y;
-        };
-      }
-
-      function inBounds(x,y) {
-        return x > 0 && x <= unscaledWidth && y > 0 && y <= unscaledHeight;
-      }
-
-      function getNeighbors(x,y) {
-        return [
-          [x+1, y],
-          [x-1, y],
-          [x+1, y+1],
-          [x-1, y-1],
-          [x+1,y-1],
-          [x-1,y+1],
-          [x, y+1],
-          [x, y-1],
-        ];
-      }
-
-      function neighbors(x, y) {
-        return getNeighbors(x, y).filter(function(neighbor) {
-          return inBounds(neighbor[0], neighbor[1]) ? true : false;
-        });
-      }
 
       function doLife(x, y) {
         var thisLife = grid.at(x,y);
@@ -539,16 +611,6 @@ console.log(event)
           clearInterval(gameInterval);
           return;
         }
-
-        livingCellsEl.innerHTML = newCellCount;
-        countEl.innerHTML = counter;
-      }
-
-
-
-      document.getElementById('play').onclick = function() {
-        play();
-        gameInterval = setInterval(play, TICK);
       }
     </script>
   </body>
