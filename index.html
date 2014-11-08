@@ -50,7 +50,7 @@
       */
 
       var LIFE_STATES = {
-        VIRGIN: 'virgin',
+        PRISTINE: 'pristine',
         ALIVE: 'alive',
         DEAD: 'dead'
       };
@@ -60,8 +60,6 @@
         ARCADE: 'arcade'
       };
 
-
-      var gameInterval = undefined;
 
       var SQUARE_SIZE = 8;
       var bounds = document.getElementById('overlay').getBoundingClientRect();
@@ -81,7 +79,10 @@
           playing: false,
           livingCells: 0,
           lastLivingCells: 0,
-          generations: 0
+          generations: 0,
+          stagnationThreshold: 5,
+          stagnant: false,
+          stagnantGenerations: 0
         },
 
         updateLivingCells: function(count) {
@@ -89,6 +90,20 @@
             lastLivingCells: this.get('livingCells'),
             livingCells: count
           });
+
+          if (this.get('livingCells') === this.get('lastLivingCells')) {
+            this.set('stagnantGenerations', this.get('stagnantGenerations') + 1);
+          } else {
+            this.set('stagnantGenerations', this.get('stagnantGenerations') - 1);
+          }
+
+          if (this.get('stagnantGenerations') >= this.get('stagnationThreshold')) {
+            this.set('stagnant', true);
+          }
+        },
+
+        updateGeneration: function() {
+          this.set('generations', this.get('generations') + 1);
         }
       }))();
 
@@ -104,8 +119,8 @@
       // Represents a single unit in the game.
       function Cell(initialXPos, initialYPos, size) {
         this.liveTime = 0;
-        this.currentState = LIFE_STATES.VIRGIN;
-        this.previousState = LIFE_STATES.VIRGIN;
+        this.currentState = LIFE_STATES.PRISTINE;
+        this.previousState = LIFE_STATES.PRISTINE;
         this.size = size;
         this.willLive = false;
         this.willDie = false;
@@ -115,7 +130,9 @@
       }
 
       Cell.prototype.setState = function(state) {
-        this.previousState = this.currentState;
+        var currentState = this.getState();
+
+        this.previousState = currentState;
         this.history.push(this.previousState);
         this.currentState = state;
 
@@ -127,7 +144,7 @@
         var size = this.size;
         var location = this.location;
 
-        ctx.fillStyle = this.currentState === LIFE_STATES.ALIVE ? "black" : "white";
+        ctx.fillStyle = this.isAlive() ? "black" : "white";
         ctx.fillRect((location.x * size) - size, (location.y * size) - size, size, size);
       };
 
@@ -144,7 +161,7 @@
       };
 
       Cell.prototype.isPristine = function() {
-        return this.currentState === LIFE_STATES.VIRGIN;
+        return this.currentState === LIFE_STATES.PRISTINE;
       };
 
       Cell.constructor = Cell;
@@ -174,9 +191,7 @@
         return this.cells[x + this.width * y];
       };
 
-      Board.prototype.filterBy = function(list, state) {
-        list = list || this.cells;
-
+      Board.prototype.filterBy = function(state) {
         return _.filter(this.cells, function(cell) {
           return cell.getState() === state;
         });
@@ -187,8 +202,7 @@
       };
 
       Board.prototype.neighborsOf = function(cell) {
-        var location = cell.location;
-        var neighborCoords = Board.neighbors(location.x, location.y);
+        var neighborCoords = Board.neighbors(cell.location.x, cell.location.y);
         var board = this;
 
         return _.compact(neighborCoords.map(function(coords) {
@@ -331,19 +345,35 @@
           this.ctx = this.el.getContext('2d');
           this.runInterval = null;
 
-          this.listenTo(gameService, 'change:playing', this._onPlayStateChange);
-          _.bindAll(this, '_processSampledPoint', 'run', '_setNextCellState', '_onPlayStateChange');
-          this._seed(850);
+          this.listenTo(gameService, 'change:playing', this._maybeStopPlay);
+          this.listenTo(gameService, 'change:stagnant', this._maybeEndGame);
+
+          _.bindAll(this, '_processSampledPoint', 'run', '_setNextCellState', '_maybeStopPlay', '_maybeEndGame');
+          this._seed(100);
         },
 
-        _onPlayStateChange: function(model, value, etc) {
+        _maybeEndGame: function(model, value) {
+          if (!value) {
+            return;
+          }
+
+          this._stopPlayLoop();
+          alert('GameOver!');
+        },
+
+        _maybeStopPlay: function(model, value) {
           if (value) {
-            this.run();
+            this.runInterval = setInterval(this.run, gameService.get('tickSpeed'));
           } else {
-            if (this.runInterval) {
-              clearInterval(this.runInterval);
-              this.runInterval = null;
-            }
+            this._stopPlayLoop();
+          }
+        },
+
+        _stopPlayLoop: function() {
+
+          if (this.runInterval) {
+            clearInterval(this.runInterval);
+            this.runInterval = null;
           }
         },
 
@@ -375,18 +405,8 @@
             cell.willDie = false;
           });
 
-          gameService.set({
-            generations: gameService.get('generations') + 1,
-            livingCells: _.size(this.model.filterBy(LIFE_STATES.ALIVE))
-          });
-
-          this.runInterval = setTimeout(this.run, gameService.get('tickSpeed'));
-
-      //   if (shouldEnd >= 8) {
-      //     alert('Game Over');
-      //     clearInterval(gameInterval);
-      //     return;
-      //   }
+          gameService.updateLivingCells(_.size(this.model.filterBy(LIFE_STATES.ALIVE)));
+          gameService.updateGeneration();
         },
 
         _seed: function(numberOfSamples) {
@@ -549,68 +569,6 @@
 
         ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         grid.set(x, y, 1);
-      }
-
-
-      function play() {
-        game.PLAYING = !game.PLAYING;
-        var currentCellCount = grid.filter(function(item) { return item;}).length;
-
-        grid.each(function(state, coordString) {
-          var coords = coordString.split('x');
-          var x = +coords[0], y = +coords[1];
-
-          neighborCount = neighbors(x,y).filter(function(coordList) {
-            var xx = +coordList[0], yy = +coordList[1];
-
-            return grid.at(xx, yy) ? true : false;
-          }).length;
-
-          if (neighborCount > 1 && neighborCount <= 3) {
-            if (game.MODE === GAME_MODES.ARCADE) {
-              reColor(x,y, "rgba(255, 0, 100, 0.20)");
-            }
-
-            if (neighborCount === 3) {
-              shouldLive.push([x,y]);
-            }
-          } else if (neighborCount >= 4 || neighborCount <= 1) {
-            shouldDie.push([x,y]);
-          }
-        });
-
-        var toKill;
-        while (shouldDie.length) {
-          toKill = shouldDie.pop();
-
-          kill(toKill[0], toKill[1]);
-        }
-
-        var toBirth;
-        while (shouldLive.length) {
-          toBirth = shouldLive.pop();
-
-          birth(toBirth[0], toBirth[1]);
-        }
-
-        shouldDie.length = 0;
-        shouldLive.length = 0;
-        counter += 1;
-
-
-        var newCellCount = grid.filter(function(item) { return item; }).length;
-
-        if (newCellCount === currentCellCount) {
-          shouldEnd++;
-        } else {
-          shouldEnd = 0;
-        }
-
-        if (shouldEnd >= 8) {
-          alert('Game Over');
-          clearInterval(gameInterval);
-          return;
-        }
       }
     </script>
   </body>
