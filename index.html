@@ -27,11 +27,10 @@
       </div>
 
       <div>
-        <button type="button" id="play">Play</button>
-        <button type="button" id="pause">Pause</button>
-        <button type="button" id="reset">Reset</button>
-        <button type="button" id="grid-toggle">Grid</button>
-        <button type="button" id="clear">Clear</button>
+        <button type="button" id="play"><span id="play-button-text"></span></button>
+        <button type="button" id="reset">reset</button>
+        <button type="button" id="grid-toggle">grid: <span id="grid-text"></span></button>
+        <button type="button" id="mode">mode: <span id="game-mode"></span></button>
       </div>
 
     </div>
@@ -64,15 +63,7 @@
       var SQUARE_SIZE = 8;
       var bounds = document.getElementById('overlay').getBoundingClientRect();
 
-      var shouldEnd = 0;
-
-
-
-      var RulesService = {
-
-      };
-
-      var gameService = new (Backbone.Model.extend({
+      var GameService = new (Backbone.Model.extend({
         defaults: {
           tickSpeed: 300,
           mode: 'classic',
@@ -80,9 +71,9 @@
           livingCells: 0,
           lastLivingCells: 0,
           generations: 0,
-          stagnationThreshold: 5,
+          stagnationLimit: 5,
           stagnant: false,
-          stagnantGenerations: 0
+          stagnantCount: 0
         },
 
         updateLivingCells: function(count) {
@@ -91,19 +82,40 @@
             livingCells: count
           });
 
-          if (this.get('livingCells') === this.get('lastLivingCells')) {
-            this.set('stagnantGenerations', this.get('stagnantGenerations') + 1);
-          } else {
-            this.set('stagnantGenerations', this.get('stagnantGenerations') - 1);
-          }
-
-          if (this.get('stagnantGenerations') >= this.get('stagnationThreshold')) {
-            this.set('stagnant', true);
-          }
+          this.hasStagnated();
         },
 
         updateGeneration: function() {
           this.set('generations', this.get('generations') + 1);
+        },
+
+        reset: function() {
+          this.clear({silent: true}).set(this.defaults);
+          this.trigger('reset');
+        },
+
+        isStagnant: function() {
+          return this.get('stagnantCount') >= this.get('stagnationLimit')
+        },
+
+        hasStagnated: function() {
+          var count = this.get('stagnantCount');
+
+          count += this.cellsHaveChanged() ? 1 : -1;
+
+          if (count <= 0) {
+            return;
+          }
+
+          this.set('stagnantCount', count);
+
+          if (this.isStagnant()) {
+            this.set('stagnant', true);
+          }
+        },
+
+        cellsHaveChanged: function() {
+          return this.get('livingCells') === this.get('lastLivingCells')
         }
       }))();
 
@@ -140,11 +152,11 @@
       };
 
       // Pass in the drawing context and let the cell render itself to it.
-      Cell.prototype.draw = function(ctx) {
+      Cell.prototype.draw = function(ctx, mode) {
         var size = this.size;
         var location = this.location;
 
-        ctx.fillStyle = this.isAlive() ? "black" : "white";
+        ctx.fillStyle = this.getFillColor(mode);
         ctx.fillRect((location.x * size) - size, (location.y * size) - size, size, size);
       };
 
@@ -162,6 +174,45 @@
 
       Cell.prototype.isPristine = function() {
         return this.currentState === LIFE_STATES.PRISTINE;
+      };
+
+      Cell.prototype.isOld = function() {
+        return this.history.length > 150;
+      };
+
+      Cell.prototype.isReallyOld = function() {
+        return this.history.length > 300;
+      };
+
+      Cell.prototype.reset = function() {
+        this.liveTime = 0;
+        this.currentState = LIFE_STATES.PRISTINE;
+        this.previousState = LIFE_STATES.PRISTINE;
+        this.willLive = false;
+        this.willDie = false;
+
+        this.history.length = 0;
+      };
+
+      Cell.prototype.getFillColor = function(mode) {
+        var state = this.getState();
+
+        if (mode === 'classic') {
+          if (this.isAlive()) {
+            return 'rgba(0,0,0,1)';
+          } else if (this.isDead()) {
+            return 'rgba(255,255,255,1)';
+          }
+        } else if (mode === 'arcade') {
+          if (this.isAlive()) {
+            if (this.isReallyOld()) {
+              return 'rgba(0, 255, 0, 0.2)';
+            }
+            return this.isOld() ? 'rgba(255,0,255,0.20)'  : 'rgba(0,100,255,0.50)';
+          } else if (this.isDead()) {
+            return 'rgba(235,245,255,0.8)';
+          }
+        }
       };
 
       Cell.constructor = Cell;
@@ -197,8 +248,8 @@
         });
       };
 
-      Board.prototype.each = function(callback) {
-        _.each(this.cells, callback);
+      Board.prototype.each = function(callback, context) {
+        _.each(this.cells, callback, context || null);
       };
 
       Board.prototype.neighborsOf = function(cell) {
@@ -213,6 +264,12 @@
             return board.at(x, y);
           }
         }));
+      };
+
+      Board.prototype.reset = function() {
+        this.each(function(cell) {
+          cell.reset();
+        }, this);
       };
 
       Board.neighbors = function(x, y) {
@@ -291,47 +348,18 @@
         }
       });
 
-      // A view bound to a single data attribute that changes over time.
+      // A view bound to a single piece of primitive data that changes over time.
       var BoundView = Backbone.View.extend({
         template: _.template('<%= data %>'),
 
         initialize: function(options) {
           this.boundProp = options.boundProp;
-          this.listenTo(gameService, 'change:' + options.boundProp, this.render);
+          this.listenTo(GameService, 'change:' + options.boundProp, this.render);
         },
 
         render: function() {
-          this.el.innerHTML = this.template({data: gameService.get(this.boundProp)});
+          this.el.innerHTML = this.template({data: GameService.get(this.boundProp)});
           return this;
-        }
-      });
-
-      var ButtonView = Backbone.View.extend({
-        events: {
-          'click': 'onClick'
-        },
-
-        initialize: function(options) {
-          this.model = new Backbone.Model({
-            active: false
-          });
-
-          this.callback = options.callback;
-          this.listenTo(this.model, 'change:active', this.updateClass);
-          _.bindAll(this, 'updateClass');
-        },
-
-        updateClass: function(model, value) {
-          if (value) {
-            this.el.className = this.el.className + ' active';
-          } else {
-            this.el.className = this.el.className.replace('active', '');
-          }
-        },
-
-        onClick: function(event) {
-          this.model.set('active', !this.model.get('active'));
-          this.callback(event, this.model.toJSON());
         }
       });
 
@@ -340,19 +368,31 @@
         el: '#board',
 
         initialize: function() {
+          this.seedSamples = 500;
           this.model = new Board(this.el.width, this.el.height);
           this.seedService = SamplerService;
           this.ctx = this.el.getContext('2d');
           this.runInterval = null;
+          this.mode = 'classic';
 
-          this.listenTo(gameService, 'change:playing', this._maybeStopPlay);
-          this.listenTo(gameService, 'change:stagnant', this._maybeEndGame);
+          this.listenTo(GameService, 'change:playing', this._maybeStop);
+          this.listenTo(GameService, 'change:mode', this._setMode);
+          this.listenTo(GameService, 'change:stagnant', this._maybeEnd);
 
-          _.bindAll(this, '_processSampledPoint', 'run', '_setNextCellState', '_maybeStopPlay', '_maybeEndGame');
-          this._seed(100);
+          _.bindAll(this, 'run', '_maybeStop', '_maybeEnd');
+          this.render().seed();
         },
 
-        _maybeEndGame: function(model, value) {
+        render: function() {
+          this.ctx.clearRect(0, 0, this.el.width, this.el.height);
+          return this;
+        },
+
+        _setMode: function(model, value) {
+          this.mode = value;
+        },
+
+        _maybeEnd: function(model, value) {
           if (!value) {
             return;
           }
@@ -361,16 +401,15 @@
           alert('GameOver!');
         },
 
-        _maybeStopPlay: function(model, value) {
+        _maybeStop: function(model, value) {
           if (value) {
-            this.runInterval = setInterval(this.run, gameService.get('tickSpeed'));
+            this.runInterval = setInterval(this.run, GameService.get('tickSpeed'));
           } else {
             this._stopPlayLoop();
           }
         },
 
         _stopPlayLoop: function() {
-
           if (this.runInterval) {
             clearInterval(this.runInterval);
             this.runInterval = null;
@@ -390,7 +429,7 @@
         },
 
         run: function() {
-          this.model.each(this._setNextCellState);
+          this.model.each(this._setNextCellState, this);
 
           var ctx = this.ctx;
 
@@ -400,21 +439,21 @@
             }
 
             cell.setState((cell.willLive ? LIFE_STATES.ALIVE : LIFE_STATES.DEAD));
-            cell.draw(ctx);
+            cell.draw(ctx, this.mode);
             cell.willLive = false;
             cell.willDie = false;
-          });
+          }.bind(this));
 
-          gameService.updateLivingCells(_.size(this.model.filterBy(LIFE_STATES.ALIVE)));
-          gameService.updateGeneration();
+          GameService.updateLivingCells(_.size(this.model.filterBy(LIFE_STATES.ALIVE)));
+          GameService.updateGeneration();
         },
 
-        _seed: function(numberOfSamples) {
-          var points = this.seedService.sample(numberOfSamples);
+        seed: function() {
+          var points = this.seedService.sample(this.seedSamples);
 
-          gameService.set('livingCells', points.length);
+          GameService.set('livingCells', points.length);
 
-          _.each(points, this._processSampledPoint);
+          _.each(points, this._processSampledPoint, this);
         },
 
         _processSampledPoint: function(point) {
@@ -438,6 +477,132 @@
         }
       });
 
+      var ButtonModel = Backbone.Model.extend({
+        defaults: {
+          text: '',
+          active: false
+        },
+
+        initialize: function(config) {
+          if (config && config.initialText) {
+            this.set('text', config.initialText, {silent: true});
+          }
+        }
+      });
+
+      var ButtonView = Backbone.View.extend({
+        events: {
+          'click': 'onClick'
+        },
+
+        initialize: function(options) {
+          this.model = new ButtonModel(options.modelData);
+          this.callback = options.callback;
+        },
+
+        onClick: function(event) {
+          this.model.set('active', !this.model.get('active'));
+          this.callback(event, this.model.toJSON());
+        }
+      });
+
+      var ModeButtonView = ButtonView.extend({
+        MODES: {
+          CLASSIC: 'classic',
+          ARCADE: 'arcade'
+        },
+
+        initialize: function(options) {
+          ButtonView.prototype.initialize.apply(this, arguments);
+
+          this.textView = new TextView({
+            el: '#game-mode',
+            model: this.model,
+            prop: 'text'
+          });
+
+          this.listenTo(GameService, 'reset', this.resetModel);
+
+          _.bindAll(this, 'resetModel');
+        },
+
+        resetModel: function() {
+          this.model.set('text', this.model.get('initialText'));
+        },
+
+        onClick: function(event) {
+          var isClassicMode = this.model.get('text') === this.MODES.CLASSIC;
+          var modes = this.MODES;
+
+          this.model.set('text', isClassicMode ? modes.ARCADE : modes.CLASSIC);
+          this.model.set('active', !this.model.get('active'));
+
+          this.callback(event, this.model.toJSON());
+        }
+      });
+
+      var TextView = Backbone.View.extend({
+        template: _.template('<%= data %>'),
+
+        initialize: function(options) {
+          this.model = options.model || new Backbone.Model();
+          this.prop = options.prop;
+          this.listenTo(this.model, 'change:' + this.prop, this.render);
+
+          _.bindAll(this, 'render');
+
+          this.render();
+        },
+
+        render: function() {
+          this.el.innerHTML = this.template({data: this.model.get(this.prop)});
+          return this;
+        }
+      });
+
+      var PlayButtonView = ButtonView.extend({
+        initialize: function(options) {
+          ButtonView.prototype.initialize.apply(this, arguments);
+
+          this.textView = new TextView({
+            el: '#play-button-text',
+            model: this.model,
+            prop: 'text'
+          });
+
+          this.listenTo(GameService, 'reset', this.resetModel);
+
+          _.bindAll(this, 'resetModel');
+        },
+
+        resetModel: function() {
+          this.model.set('text', this.model.get('initialText'));
+        },
+
+        onClick: function(event) {
+          ButtonView.prototype.onClick.apply(this, event);
+          this.model.set('text', this.model.get('active') ? 'playing' : 'paused');
+        }
+      });
+
+      var GridButtonView = ButtonView.extend({
+        initialize: function(options) {
+          ButtonView.prototype.initialize.apply(this, arguments);
+
+          this.textView = new TextView({
+            el: '#grid-text',
+            model: this.model,
+            prop: 'text'
+          });
+        },
+
+        onClick: function(event) {
+          ButtonView.prototype.onClick.apply(this, event);
+          this.model.set('text', this.model.get('active') ? 'on' : 'off');
+        }
+      });
+
+
 
       /** VIEW CONTROLLERS **/
 
@@ -449,13 +614,14 @@
         },
 
         initialize: function() {
-          _.bindAll(this, 'togglePlay', 'toggleGrid', 'pause');
+          _.bindAll(this, 'togglePlay', 'toggleGrid', 'reset', 'toggleMode');
 
           this.statsView = new GameStatsView();
 
-          this.playButton = new ButtonView({
+          this.playButton = new PlayButtonView({
             el: '#play',
-            callback: this.togglePlay
+            callback: this.togglePlay,
+            modelData: { initialText: 'play'}
           });
 
           this.resetButton = new ButtonView({
@@ -463,14 +629,16 @@
             callback: this.reset
           });
 
-          this.gridButton = new ButtonView({
+          this.gridButton = new GridButtonView({
             el: '#grid-toggle',
+            modelData: { initialText: 'off'},
             callback: this.toggleGrid
           });
 
-          this.pauseButton = new ButtonView({
-            el: '#pause',
-            callback: this.pause
+          this.modeButton = new ModeButtonView({
+            el: '#mode',
+            callback: this.toggleMode,
+            modelData: { initialText: 'classic'}
           });
 
           this.overlayView = new OverlayView();
@@ -478,21 +646,21 @@
         },
 
         togglePlay: function(event, payload) {
-          gameService.set('playing', true);
+          GameService.set('playing', payload.active);
         },
 
-        reset: function(event, payload) {
-          console.log('clicked reset');
-        },
-
-        pause: function(event, payload) {
-          if (gameService.get('playing')) {
-            gameService.set('playing', false);
-          }
+        reset: function() {
+          GameService.reset();
+          this.boardView.model.reset();
+          this.boardView.render().seed();
         },
 
         toggleGrid: function(event, payload) {
           this.overlayView.toggleGrid(payload);
+        },
+
+        toggleMode: function(event, payload) {
+          GameService.set('mode', payload.text);
         },
 
         toggleCell: function(event) {
@@ -528,48 +696,6 @@
         [0,0,1,0,0,0,0,0],
         [0,1,1,0,0,0,0,0]
       ];
-
-      function doLife(x, y) {
-        var thisLife = grid.at(x,y);
-
-        var coordsList = [x, y];
-        if (!thisLife) {
-          shouldLive.push(coordsList);
-        } else {
-          shouldDie.push(coordsList);
-        }
-      }
-
-      function reColor(x, y, color) {
-        ctx.fillStyle = color;
-        ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
-      }
-
-      function kill(x,y) {
-        if (game.MODE === GAME_MODES.CLASSIC) {
-          ctx.fillStyle = 'white';
-        } else {
-          if (grid.at(x,y)) {
-            ctx.fillStyle = "rgba(235,245,255,0.8)";
-          } else {
-            ctx.fillStyle = "rgba(255,155,0,0.12)";
-          }
-        }
-
-        ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
-        grid.set(x, y, 0);
-      }
-
-      function birth(x, y) {
-        if (game.MODE === GAME_MODES.CLASSIC) {
-          ctx.fillStyle = 'black';
-        } else {
-          ctx.fillStyle = "rgba(0,100,255,0.50)";
-        }
-
-        ctx.fillRect((x * SQUARE_SIZE) - SQUARE_SIZE, (y * SQUARE_SIZE) - SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
-        grid.set(x, y, 1);
-      }
     </script>
   </body>
 </html>

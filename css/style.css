@@ -1,5 +1,5 @@
 canvas {
-  /*background: rgba(0,255,155,0.25);*/
+  //background: rgba(0,255,155,0.25);
 }
 
 .container {
@@ -19,18 +19,17 @@ canvas {
 button {
   padding: 8px;
   outline: 0;
-  background: #eeeeef;
   border: none;
-  font-size: 23px;
+  font-size: 17px;
   font-weight: 300;
   font-family: Helvetica;
   cursor: pointer;
-  width: 80px;
+  width: 130px;
   color: #333;
-}
-
-button.active {
-  background: #eeeee6;
+  border-radius: 3px 3px;
+  background: rgba(252, 250, 80, 0.78);
+  color: #FF5E95;
+  border-bottom: 2px solid rgba(234, 205, 4, 1);
 }
 
 #overlay {
