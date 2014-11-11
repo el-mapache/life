@@ -59,13 +59,9 @@
         ARCADE: 'arcade'
       };
 
-
-      var SQUARE_SIZE = 8;
-      var bounds = document.getElementById('overlay').getBoundingClientRect();
-
       var GameService = new (Backbone.Model.extend({
         defaults: {
-          tickSpeed: 300,
+          tickSpeed: 200,
           mode: 'classic',
           playing: false,
           livingCells: 0,
@@ -128,6 +124,19 @@
         this.y = y;
       }
 
+      var ButtonModel = Backbone.Model.extend({
+        defaults: {
+          text: '',
+          active: false
+        },
+
+        initialize: function(config) {
+          if (config && config.initialText) {
+            this.set('text', config.initialText, {silent: true});
+          }
+        }
+      });
+
       // Represents a single unit in the game.
       function Cell(initialXPos, initialYPos, size) {
         this.liveTime = 0;
@@ -141,6 +150,16 @@
         this.history = [];
       }
 
+      Cell.prototype.makeLive = function() {
+        this.setState(LIFE_STATES.ALIVE);
+        return this;
+      };
+
+      Cell.prototype.makeDead = function() {
+        this.setState(LIFE_STATES.DEAD);
+        return this;
+      };
+
       Cell.prototype.setState = function(state) {
         var currentState = this.getState();
 
@@ -152,11 +171,11 @@
       };
 
       // Pass in the drawing context and let the cell render itself to it.
-      Cell.prototype.draw = function(ctx, mode) {
+      Cell.prototype.draw = function(ctx, mode, color) {
         var size = this.size;
         var location = this.location;
 
-        ctx.fillStyle = this.getFillColor(mode);
+        ctx.fillStyle = color || this.getFillColor(mode);
         ctx.fillRect((location.x * size) - size, (location.y * size) - size, size, size);
       };
 
@@ -218,9 +237,18 @@
       Cell.constructor = Cell;
 
 
+      // var Board = Backbone.Collection.extend({
+      //   initialize: function(options) {
+      //     options = options || {};
 
-      function Board(width, height) {
-        var TILE_SIZE = 8;
+      //     var width = options.width;
+      //     var height = options.height;
+
+      //   }
+      // })
+
+      function Board(width, height, tileSize) {
+        var TILE_SIZE = tileSize;
 
         this.cells = [];
         this.width = width/TILE_SIZE;
@@ -293,12 +321,19 @@
       var OverlayView = Backbone.View.extend({
         el: '#overlay',
 
-        initialize: function() {
+        events: {
+          'click #overlay': 'getDrawPoint'
+        },
+
+        initialize: function(options) {
           this.model = new Backbone.Model({
             strokeStyle: '#333',
             lineWidth: 1,
             globalAlpha: 0
           });
+
+          this.bounds = this.el.getBoundingClientRect();
+          this.TILE_SIZE = options && options.TILE_SIZE || 1;
 
           this.listenTo(this.model, 'change:globalAlpha', this.render.bind(this));
         },
@@ -311,12 +346,12 @@
           ctx.clearRect(0, 0, this.el.width, this.el.height);
           ctx.beginPath();
 
-          for (var x = 0; x < this.el.width; x += SQUARE_SIZE) {
+          for (var x = 0; x < this.el.width; x += this.TILE_SIZE) {
             ctx.moveTo(x+0.5, 0);
             ctx.lineTo(x + 0.5, this.el.height);
           }
 
-          for (var x = 0; x < this.el.height; x += SQUARE_SIZE) {
+          for (var x = 0; x < this.el.height; x += this.TILE_SIZE) {
             ctx.moveTo(0, x + 0.5);
             ctx.lineTo(this.el.width, x + 0.5);
           }
@@ -329,6 +364,32 @@
 
         toggleGrid: function(payload) {
           this.model.set('globalAlpha', (payload.active ? 1.0 : 0.0));
+        },
+
+        getDrawPoint: function(event) {
+          var x = (((event.clientX - this.bounds.left) / this.TILE_SIZE) | 0) + 1;
+          var y = (((event.clientY - this.bounds.top) / this.TILE_SIZE) | 0) - 1;
+
+          return [x, y];
+        }
+      });
+
+      var TextView = Backbone.View.extend({
+        template: _.template('<%= data %>'),
+
+        initialize: function(options) {
+          this.model = options.model || new Backbone.Model();
+          this.prop = options.prop;
+          this.listenTo(this.model, 'change:' + this.prop, this.render);
+
+          _.bindAll(this, 'render');
+
+          this.render();
+        },
+
+        render: function() {
+          this.el.innerHTML = this.template({data: this.model.get(this.prop)});
+          return this;
         }
       });
 
@@ -336,30 +397,17 @@
         el: '#game-stats',
 
         initialize: function() {
-          this.generationView = new BoundView({
+          this.generationView = new TextView({
             el: '#generations',
-            boundProp: 'generations'
+            prop: 'generations',
+            model: GameService
           }).render();
 
-          this.livingCellCountView = new BoundView({
+          this.livingCellCountView = new TextView({
             el: '#living-cells',
-            boundProp: 'livingCells'
+            prop: 'livingCells',
+            model: GameService
           }).render();
-        }
-      });
-
-      // A view bound to a single piece of primitive data that changes over time.
-      var BoundView = Backbone.View.extend({
-        template: _.template('<%= data %>'),
-
-        initialize: function(options) {
-          this.boundProp = options.boundProp;
-          this.listenTo(GameService, 'change:' + options.boundProp, this.render);
-        },
-
-        render: function() {
-          this.el.innerHTML = this.template({data: GameService.get(this.boundProp)});
-          return this;
         }
       });
 
@@ -367,9 +415,10 @@
       var BoardView = Backbone.View.extend({
         el: '#board',
 
-        initialize: function() {
+        initialize: function(options) {
           this.seedSamples = 500;
-          this.model = new Board(this.el.width, this.el.height);
+          this.TILE_SIZE = options && options.TILE_SIZE || 1;
+          this.model = new Board(this.el.width, this.el.height, this.TILE_SIZE);
           this.seedService = SamplerService;
           this.ctx = this.el.getContext('2d');
           this.runInterval = null;
@@ -398,7 +447,7 @@
           }
 
           this._stopPlayLoop();
-          alert('GameOver!');
+          alert('Game Over!');
         },
 
         _maybeStop: function(model, value) {
@@ -435,10 +484,12 @@
 
           this.model.each(function(cell) {
             if (!cell.willLive && !cell.willDie) {
+              cell.draw(ctx, this.mode);
               return;
             }
 
-            cell.setState((cell.willLive ? LIFE_STATES.ALIVE : LIFE_STATES.DEAD));
+            cell[cell.willLive ? 'makeLive' : 'makeDead'];
+
             cell.draw(ctx, this.mode);
             cell.willLive = false;
             cell.willDie = false;
@@ -471,24 +522,13 @@
           var cell = this.model.at(point[0], point[1]);
 
           if (cell) {
-            cell.setState(LIFE_STATES.ALIVE);
+            cell.makeLive();
             cell.draw(this.ctx);
           }
         }
       });
 
-      var ButtonModel = Backbone.Model.extend({
-        defaults: {
-          text: '',
-          active: false
-        },
 
-        initialize: function(config) {
-          if (config && config.initialText) {
-            this.set('text', config.initialText, {silent: true});
-          }
-        }
-      });
 
       var ButtonView = Backbone.View.extend({
         events: {
@@ -541,24 +581,7 @@
         }
       });
 
-      var TextView = Backbone.View.extend({
-        template: _.template('<%= data %>'),
 
-        initialize: function(options) {
-          this.model = options.model || new Backbone.Model();
-          this.prop = options.prop;
-          this.listenTo(this.model, 'change:' + this.prop, this.render);
-
-          _.bindAll(this, 'render');
-
-          this.render();
-        },
-
-        render: function() {
-          this.el.innerHTML = this.template({data: this.model.get(this.prop)});
-          return this;
-        }
-      });
 
       var PlayButtonView = ButtonView.extend({
         initialize: function(options) {
@@ -609,8 +632,10 @@
       var AppViewController = Backbone.View.extend({
         el: '#app-container',
 
+        TILE_SIZE: 8,
+
         events: {
-          'click #overlay': 'toggleCell'
+          'click #overlay': 'tellCellToDraw'
         },
 
         initialize: function() {
@@ -641,8 +666,8 @@
             modelData: { initialText: 'classic'}
           });
 
-          this.overlayView = new OverlayView();
-          this.boardView = new BoardView();
+          this.overlayView = new OverlayView({TILE_SIZE: this.TILE_SIZE});
+          this.boardView = new BoardView({TILE_SIZE: this.TILE_SIZE});
         },
 
         togglePlay: function(event, payload) {
@@ -663,11 +688,12 @@
           GameService.set('mode', payload.text);
         },
 
-        toggleCell: function(event) {
-          var x = (((event.clientX - bounds.left) / SQUARE_SIZE) | 0) + 1;
-          var y = (((event.clientY - bounds.top) / SQUARE_SIZE) | 0) - 1;
+        tellCellToDraw: function(event) {
+          // ask the overlay to derive the coords for us.
+          var clickPointTuple = this.overlayView.getDrawPoint(event);
 
-          this.boardView.setCellAtPoint([x, y]);
+          // Have the board view draw its cell at the appropriate spot.
+          this.boardView.setCellAtPoint(clickPointTuple);
         }
       });
 
